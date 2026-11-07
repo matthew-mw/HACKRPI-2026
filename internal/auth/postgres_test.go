@@ -42,7 +42,7 @@ func TestPostgresSessionsAndCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Minimal users fixture: session migration is independent of vector/PostGIS.
-	if _, err = db.ExecContext(ctx, `CREATE TABLE users (id uuid PRIMARY KEY, email text NOT NULL, password_hash text)`); err != nil {
+	if _, err = db.ExecContext(ctx, `CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text NOT NULL, password_hash text, first_name text, last_name text)`); err != nil {
 		t.Fatal(err)
 	}
 	migration, err := os.ReadFile("../../migrations/002_sessions.sql")
@@ -57,10 +57,26 @@ func TestPostgresSessionsAndCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO users VALUES ($1, $2, $3)`, id, "user@example.com", string(hash)); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO users (id, email, password_hash) VALUES ($1, $2, $3)`, id, "user@example.com", string(hash)); err != nil {
 		t.Fatal(err)
 	}
 	credentials := &PasswordCredentials{DB: db}
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX uq_users_email_ci ON users (lower(email))`); err != nil {
+		t.Fatal(err)
+	}
+	registration := Registration{FirstName: "New", LastName: "User", Email: "new@example.com", Password: "long-password"}
+	newID, err := credentials.Register(ctx, registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := credentials.Authenticate(ctx, registration.Email, registration.Password); err != nil || got != newID {
+		t.Fatalf("registered login: %s %v", got, err)
+	}
+	registration.Email = "NEW@example.com"
+	if _, err := credentials.Register(ctx, registration); !errors.Is(err, ErrEmailExists) {
+		t.Fatalf("duplicate signup: %v", err)
+	}
+
 	got, err := credentials.Authenticate(ctx, " USER@EXAMPLE.COM ", "correct-password")
 	if err != nil || got != id {
 		t.Fatalf("login: %q %v", got, err)

@@ -113,7 +113,7 @@ func TestMiddlewareAccess(t *testing.T) {
 		method, path string
 		status       int
 	}{
-		{"GET", "/", 204}, {"HEAD", "/events", 204}, {"GET", "/login", 401}, {"POST", "/login", 204}, {"GET", "/healthz", 204}, {"GET", "/static/app.css", 401},
+		{"GET", "/", 204}, {"HEAD", "/events", 204}, {"GET", "/login", 204}, {"POST", "/login", 204}, {"GET", "/healthz", 204}, {"GET", "/static/app.css", 204},
 		{"GET", "/profile", 401}, {"GET", "/matches", 401}, {"GET", "/new-private-route", 401}, {"GET", "/events/private", 401}, {"POST", "/events", 401}, {"POST", "/logout", 401}, {"GET", "/api/me", 401}, {"POST", "/static/app.css", 401},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
