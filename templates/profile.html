@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8" /><title>Profile</title></head>
+  <head><meta charset="UTF-8" /><title>Profile</title><link rel="stylesheet" href="/static/css/site.css" /><script src="/static/js/auth.js" defer></script></head>
   <body><h1>Profile</h1><nav><a href="/matches">Matches</a> <a href="/events">Events</a></nav>
-  <form method="post" action="/logout"><button type="submit">Sign out</button></form></body>
+  <p role="alert" aria-live="polite"></p><form data-auth="logout" method="post" action="/logout"><button type="submit">Sign out</button></form></body>
 </html>

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -100,13 +101,16 @@ func UserID(ctx context.Context) (string, bool) {
 // Every new route is private unless explicitly added here.
 func PublicRequest(r *http.Request) bool {
 	if r.Method == http.MethodPost {
-		return r.URL.Path == "/login"
+		return r.URL.Path == "/login" || r.URL.Path == "/signup"
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
+	if strings.HasPrefix(r.URL.Path, "/static/") {
+		return true
+	}
 	switch r.URL.Path {
-	case "/", "/events", "/healthz":
+	case "/", "/events", "/healthz", "/login", "/signup":
 		return true
 	}
 	return false
@@ -129,6 +133,10 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 			}
 		}
 		if _, ok := UserID(r.Context()); !ok && !PublicRequest(r) {
+			if (r.Method == "GET" || r.Method == "HEAD") && (r.URL.Path == "/profile" || r.URL.Path == "/matches") && strings.Contains(r.Header.Get("Accept"), "text/html") {
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				return
+			}
 			api.Error(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
