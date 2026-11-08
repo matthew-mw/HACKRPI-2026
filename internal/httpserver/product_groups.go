@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -11,6 +12,8 @@ import (
 func (p product) organization(w http.ResponseWriter, r *http.Request, uid string) (any, error) {
 	var in struct {
 		Name        string `json:"name"`
+		ImageURL    string `json:"image_url"`
+		Website     string `json:"website"`
 		Address     string `json:"address"`
 		Description string `json:"description"`
 		Visibility  string `json:"visibility"`
@@ -30,6 +33,15 @@ func (p product) organization(w http.ResponseWriter, r *http.Request, uid string
 	if in.Type != "volunteer_group" && in.Type != "charity" && in.Type != "company" {
 		return nil, invalid("Choose an organization type.")
 	}
+	for _, link := range []*string{&in.ImageURL, &in.Website} {
+		*link = strings.TrimSpace(*link)
+		if !validOrganizationURL(*link) {
+			return nil, invalid("Use a complete HTTPS link for the picture or website.")
+		}
+	}
+	if (in.Type == "charity") != (r.URL.Path == "/api/charity") {
+		return nil, invalid("Register charities from the Charities page. Use the club form for clubs and companies.")
+	}
 	var orgLocation *resolvedAddress
 	if in.Type != "volunteer_group" {
 		address, err := p.resolveAddress(r.Context(), in.Address)
@@ -44,7 +56,7 @@ func (p product) organization(w http.ResponseWriter, r *http.Request, uid string
 	}
 	defer tx.Rollback()
 	var id string
-	err = tx.QueryRowContext(r.Context(), `INSERT INTO organizations(name,description,organization_type,visibility,owner_id,location_id) SELECT $2,$3,$4,$5,id,location_id FROM users WHERE id=$1 RETURNING id`, uid, in.Name, in.Description, in.Type, in.Visibility).Scan(&id)
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO organizations(name,description,organization_type,visibility,owner_id,location_id,image_url,website) SELECT $2,$3,$4,$5,id,location_id,$6,$7 FROM users WHERE id=$1 RETURNING id`, uid, in.Name, in.Description, in.Type, in.Visibility, in.ImageURL, in.Website).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +93,14 @@ func (p product) membership(w http.ResponseWriter, r *http.Request, uid string) 
 		return err
 	}
 	defer tx.Rollback()
-	var visibility, owner string
-	if err = tx.QueryRowContext(r.Context(), `SELECT visibility,owner_id FROM organizations WHERE id=$1 FOR UPDATE`, in.OrganizationID).Scan(&visibility, &owner); err != nil {
+	var visibility, owner, orgType, approval string
+	if err = tx.QueryRowContext(r.Context(), `SELECT visibility,owner_id,organization_type,approval_status FROM organizations WHERE id=$1 FOR UPDATE`, in.OrganizationID).Scan(&visibility, &owner, &orgType, &approval); err != nil {
 		return err
 	}
 	if in.Join {
+		if orgType == "charity" && approval != "approved" {
+			return denied()
+		}
 		var invited bool
 		if err = tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id=$1 AND user_id=$2 AND status IN('invited','active'))`, in.OrganizationID, uid).Scan(&invited); err != nil {
 			return err
@@ -139,7 +154,7 @@ func (p product) invite(w http.ResponseWriter, r *http.Request, uid string) erro
 		if err = idValid(in.OrganizationID); err != nil {
 			return err
 		}
-		err = tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM organizations o WHERE o.id=$1 AND (o.owner_id=$2 OR EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$2 AND m.status='active')))`, in.OrganizationID, uid).Scan(&allowed)
+		err = tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM organizations o WHERE o.id=$1 AND (o.organization_type<>'charity' OR o.approval_status='approved') AND (o.owner_id=$2 OR EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$2 AND m.status='active')))`, in.OrganizationID, uid).Scan(&allowed)
 	} else {
 		if err = idValid(in.EventID); err != nil {
 			return err
@@ -224,6 +239,7 @@ func (p product) challenge(w http.ResponseWriter, r *http.Request, uid string) e
 func (p product) createEvent(w http.ResponseWriter, r *http.Request, uid string) (any, error) {
 	var in struct {
 		OrganizationID string    `json:"organization_id"`
+		ImageURL       string    `json:"image_url"`
 		Title          string    `json:"title"`
 		Description    string    `json:"description"`
 		StartsAt       time.Time `json:"starts_at"`
@@ -242,6 +258,10 @@ func (p product) createEvent(w http.ResponseWriter, r *http.Request, uid string)
 	}
 	if err := idValid(in.OrganizationID); err != nil {
 		return nil, err
+	}
+	in.ImageURL = strings.TrimSpace(in.ImageURL)
+	if !validOrganizationURL(in.ImageURL) {
+		return nil, invalid("Use a complete HTTPS link for the event picture.")
 	}
 	in.Title = strings.TrimSpace(in.Title)
 	if in.Visibility == "" {
@@ -290,7 +310,7 @@ func (p product) createEvent(w http.ResponseWriter, r *http.Request, uid string)
 	if err != nil {
 		return nil, err
 	}
-	err = tx.QueryRowContext(r.Context(), `INSERT INTO events(organization_id,location_id,title,description,starts_at,ends_at,capacity,status,visibility,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,'published',$8,$9) RETURNING id`, in.OrganizationID, loc, in.Title, in.Description, in.StartsAt, in.EndsAt, in.Capacity, in.Visibility, uid).Scan(&id)
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO events(organization_id,location_id,title,description,starts_at,ends_at,capacity,status,visibility,created_by,image_url) VALUES($1,$2,$3,$4,$5,$6,$7,'published',$8,$9,$10) RETURNING id`, in.OrganizationID, loc, in.Title, in.Description, in.StartsAt, in.EndsAt, in.Capacity, in.Visibility, uid, in.ImageURL).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
@@ -397,4 +417,12 @@ func (p product) approveCharity(w http.ResponseWriter, r *http.Request, uid stri
 		return denied()
 	}
 	return nil
+}
+
+func validOrganizationURL(value string) bool {
+	if value == "" {
+		return true
+	}
+	parsed, err := url.Parse(value)
+	return err == nil && len(value) <= 2000 && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil
 }

@@ -1527,3 +1527,10 @@ button:disabled {
 
 .choice-chip {border:1px solid var(--border, #b7c7bd);border-radius:24px;padding:8px 14px;cursor:pointer;}
 .choice-chip:has(input:checked) {background:#d9eddf;border-color:#28764a;}
+
+.charity-image { width: 100%; height: 220px; object-fit: cover; border-radius: 16px; background: #edf2eb; }
+.charity-description { white-space: pre-wrap; }
+.charity-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+.event-detail-image { width: 100%; max-height: 240px; object-fit: cover; border-radius: 12px; margin-bottom: 16px; }
+.form-error:focus { outline: 3px solid #993f28; outline-offset: 3px; }

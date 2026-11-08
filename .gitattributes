@@ -1,2 +1,5 @@
 *.sh text eol=lf
 *.sql text eol=lf
+
+# Preserve the exact bytes of the migration already applied in production.
+migrations/005_onboarding_charities.sql -text

@@ -65,6 +65,8 @@ func TestBrowserPagesAndAssets(t *testing.T) {
 		{"/login", "Welcome back"},
 		{"/signup", "Create your account"},
 		{"/static/css/site.css", "font-family"},
+		{"/static/js/pages/charities.js", "pageViews"},
+		{"/static/js/pages/profile.js", "Set location"},
 	} {
 		for _, method := range []string{"GET", "HEAD"} {
 			r := httptest.NewRequest(method, tc.path, nil)
@@ -196,6 +198,84 @@ func TestSignupSession(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		if w.Code != 200 || !strings.Contains(w.Body.String(), "Volunteer Together") {
 			t.Fatal("signup session cannot view profile")
+		}
+	}
+}
+
+func TestCleanPageRoutes(t *testing.T) {
+	sessions := auth.NewManager(make(testStore), false)
+	handler := NewHandler(sessions, testCredentials{})
+	loginResponse := httptest.NewRecorder()
+	if err := sessions.Start(loginResponse, httptest.NewRequest("GET", "/", nil), "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	cookie := loginResponse.Result().Cookies()[0]
+	for _, path := range []string{"/discover", "/my-events", "/clubs", "/charities", "/challenges", "/impact", "/profile"} {
+		for _, method := range []string{"GET", "HEAD"} {
+			for _, authenticated := range []bool{false, true} {
+				r := httptest.NewRequest(method, path, nil)
+				r.Header.Set("Accept", "text/html")
+				if authenticated {
+					r.AddCookie(cookie)
+				}
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, r)
+				if !authenticated && path != "/discover" {
+					if w.Code != 303 || w.Header().Get("Location") != "/login" {
+						t.Fatalf("%s: missing login redirect", path)
+					}
+					continue
+				}
+				if w.Code != 200 {
+					t.Fatalf("%s %s: %d", method, path, w.Code)
+				}
+				if method == "HEAD" && w.Body.Len() != 0 {
+					t.Fatalf("HEAD %s returned body", path)
+				}
+				if method == "GET" && (!strings.Contains(w.Body.String(), `id="main"`) || strings.Contains(w.Body.String(), `href="#`)) {
+					t.Fatalf("%s: missing shell or hash links", path)
+				}
+			}
+		}
+		r := httptest.NewRequest("POST", path, nil)
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != 405 {
+			t.Fatalf("POST %s: %d", path, w.Code)
+		}
+	}
+}
+
+func TestSignedInAuthPageRedirects(t *testing.T) {
+	sessions := auth.NewManager(make(testStore), false)
+	handler := NewHandler(sessions, testCredentials{})
+	started := httptest.NewRecorder()
+	if err := sessions.Start(started, httptest.NewRequest("GET", "/", nil), "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/login", "/signup"} {
+		for _, method := range []string{"GET", "HEAD"} {
+			for _, cookie := range []*http.Cookie{nil, {Name: "session", Value: "invalid"}, started.Result().Cookies()[0]} {
+				r := httptest.NewRequest(method, path, nil)
+				r.Header.Set("Accept", "text/html")
+				if cookie != nil {
+					r.AddCookie(cookie)
+				}
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, r)
+				valid := cookie != nil && cookie.Value != "invalid"
+				if valid {
+					if w.Code != 303 || w.Header().Get("Location") != "/" {
+						t.Fatalf("%s %s: expected home redirect, got %d", method, path, w.Code)
+					}
+				} else if w.Code != 200 {
+					t.Fatalf("%s %s: guest must see form, got %d", method, path, w.Code)
+				}
+				if method == "HEAD" && w.Body.Len() != 0 {
+					t.Fatal("HEAD returned body")
+				}
+			}
 		}
 	}
 }

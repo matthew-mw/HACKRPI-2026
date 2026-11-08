@@ -123,9 +123,19 @@ func (p product) serve(w http.ResponseWriter, r *http.Request) {
 				queries["registrations"] = `SELECT COALESCE(jsonb_agg(row ORDER BY starts_at DESC),'[]'::jsonb) FROM (SELECT e.id,e.title,e.starts_at,e.ends_at,e.status,r.status AS registration_status FROM event_registrations r JOIN events e ON e.id=r.event_id WHERE r.user_id=$1 AND r.status='registered') row`
 				queries["organizations"] = `SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'name',name)),'[]'::jsonb) FROM organizations o WHERE (o.organization_type<>'charity' OR o.approval_status='approved') AND (owner_id=$1 OR EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$1 AND m.status='active' AND (m.role IN('owner','admin') OR o.organization_type='charity')))`
 				queries["my_events"] = myEventsQuery
-				queries["charities"] = `SELECT COALESCE(jsonb_agg(row),'[]'::jsonb) FROM (SELECT o.id,o.name,o.description,o.approval_status,EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$1 AND m.status='active') AS joined FROM organizations o WHERE o.organization_type='charity' AND (o.approval_status='approved' OR o.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND is_site_admin))) row`
+				queries["charities"] = `SELECT COALESCE(jsonb_agg(row),'[]'::jsonb) FROM (SELECT o.id,o.name,o.description,o.image_url,o.website,o.visibility,o.approval_status,(SELECT city FROM locations WHERE id=o.location_id) AS city,(SELECT count(*) FROM organization_members WHERE organization_id=o.id AND status='active') AS members,EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$1 AND m.status='active') AS joined FROM organizations o WHERE o.organization_type='charity' AND (o.approval_status='approved' OR o.owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND is_site_admin))) row`
+			}
+			scope := r.URL.Query().Get("page")
+			fields, scoped := pageDataFields[scope]
+			if scope != "" && !scoped {
+				api.Error(w, 400, "Unknown page.")
+				return
 			}
 			for key, q := range queries {
+				if scoped && !strings.Contains(" "+fields+" ", " "+key+" ") {
+					continue
+				}
+
 				var value json.RawMessage
 				value, err = p.json(ctx, q, user)
 				if err != nil {
@@ -190,7 +200,7 @@ func (p product) serve(w http.ResponseWriter, r *http.Request) {
 			err = p.reaction(w, r, uid)
 		case "/api/comment":
 			err = p.comment(w, r, uid)
-		case "/api/organization":
+		case "/api/organization", "/api/charity":
 			result, err = p.organization(w, r, uid)
 		case "/api/membership":
 			err = p.membership(w, r, uid)
@@ -276,7 +286,7 @@ func (p product) opportunities(r *http.Request, user any) (json.RawMessage, erro
 		}
 	}
 	return p.json(r.Context(), `SELECT COALESCE(jsonb_agg(row ORDER BY starts_at,id),'[]'::jsonb) FROM (
- SELECT e.id,e.title,e.description,e.starts_at,e.ends_at,e.capacity,e.visibility,o.id AS organization_id,o.name AS organization_name,l.label AS location_label,l.city,l.address_line1 AS address,
+ SELECT e.id,e.title,e.description,e.image_url,e.starts_at,e.ends_at,e.capacity,e.visibility,o.id AS organization_id,o.name AS organization_name,l.label AS location_label,l.city,l.address_line1 AS address,
  CASE WHEN ul.id IS NOT NULL THEN round((ST_Distance(l.coordinates,ul.coordinates)/1000.0)::numeric,1) END AS distance_km,
  GREATEST(0,e.capacity-(SELECT count(*) FROM event_registrations er WHERE er.event_id=e.id AND er.status='registered')) AS spots,
  EXISTS(SELECT 1 FROM event_registrations er WHERE er.event_id=e.id AND er.user_id=$1 AND er.status='registered') AS joined,
@@ -343,7 +353,7 @@ func (p product) updateProfile(w http.ResponseWriter, r *http.Request, uid strin
 	}
 	var address resolvedAddress
 	if in.ClearLocation && in.Location != nil {
-		return invalid("Choose a new address or remove the saved address, not both.")
+		return invalid("Choose a new location or remove your saved location.")
 	}
 	if in.Location != nil && strings.TrimSpace(in.Location.Address) != "" {
 		var err error
@@ -365,7 +375,7 @@ func (p product) updateProfile(w http.ResponseWriter, r *http.Request, uid strin
 		l := in.Location
 		l.City = strings.TrimSpace(l.City)
 		if l.City == "" || len(l.City) > 120 || len(l.Label) > 200 || l.Latitude < -90 || l.Latitude > 90 || l.Longitude < -180 || l.Longitude > 180 {
-			return invalid("Enter a valid location address.")
+			return invalid("Choose a city and state or ZIP code.")
 		}
 		var id string
 		err = tx.QueryRowContext(r.Context(), `INSERT INTO locations(label,city,coordinates,address_line1,region,postal_code) VALUES($1,$2,ST_SetSRID(ST_MakePoint($3,$4),4326)::geography,$5,$6,$7) RETURNING id`, l.Label, l.City, l.Longitude, l.Latitude, address.Address, address.Region, address.PostalCode).Scan(&id)
@@ -610,4 +620,18 @@ func (p product) comment(w http.ResponseWriter, r *http.Request, uid string) err
 	}
 	_, err = p.db.ExecContext(r.Context(), `INSERT INTO activity_comments(activity_id,user_id,body) VALUES($1,$2,$3)`, in.ActivityID, uid, in.Body)
 	return err
+}
+
+// Page requests execute only the queries needed by that view. The unscoped
+// dashboard remains available to existing API clients.
+var pageDataFields = map[string]string{
+	"home":       "profile invitations stats upcoming feed my_activity",
+	"discover":   "profile invitations",
+	"my-events":  "profile invitations my_events",
+	"crews":      "profile invitations crews",
+	"charities":  "profile invitations charities",
+	"challenges": "profile invitations stats",
+	"impact":     "profile invitations stats crews",
+	"profile":    "profile invitations stats crews my_activity",
+	"event-form": "organizations",
 }

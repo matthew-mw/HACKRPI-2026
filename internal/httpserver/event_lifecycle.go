@@ -12,7 +12,7 @@ const eventAudience = `(e.visibility='public' OR o.owner_id=$1 OR e.created_by=$
 const eventManager = `COALESCE((o.owner_id=$1 OR e.created_by=$1 OR EXISTS(SELECT 1 FROM organization_members m WHERE m.organization_id=o.id AND m.user_id=$1 AND m.role IN('owner','admin') AND m.status='active')),false)`
 
 const myEventsQuery = `SELECT COALESCE(jsonb_agg(row ORDER BY starts_at DESC,id),'[]'::jsonb) FROM (
- SELECT e.id,e.title,e.description,e.starts_at,e.ends_at,e.visibility,e.status,e.completed_at,e.actual_started_at,e.actual_ended_at,
+ SELECT e.id,e.title,e.description,e.image_url,e.starts_at,e.ends_at,e.visibility,e.status,e.completed_at,e.actual_started_at,e.actual_ended_at,
  o.name AS organization_name,l.label AS location_label,l.city,l.address_line1 AS address,
  ` + eventManager + ` AS can_manage,
  EXISTS(SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=$1 AND r.status='registered') AS joined,
@@ -49,7 +49,7 @@ func (p product) eventDetails(ctx context.Context, uid, id string) (any, error) 
 	if uid != "" {
 		user = uid
 	}
-	return p.json(ctx, `SELECT jsonb_build_object('id',e.id,'title',e.title,'description',e.description,'starts_at',e.starts_at,'ends_at',e.ends_at,
+	return p.json(ctx, `SELECT jsonb_build_object('id',e.id,'title',e.title,'description',e.description,'image_url',e.image_url,'starts_at',e.starts_at,'ends_at',e.ends_at,
  'status',e.status,'visibility',e.visibility,'completed_at',e.completed_at,'organization_name',o.name,'location_label',l.label,'city',l.city,'address',l.address_line1,
  'can_manage',`+eventManager+`,
  'joined',EXISTS(SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=$1 AND r.status='registered'),

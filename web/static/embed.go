@@ -4,5 +4,5 @@ import "embed"
 
 // Files contains public assets bundled with the server.
 //
-//go:embed css/*.css js/*.js fragments/*.html images/*.jpg
+//go:embed css/*.css js/*.js js/pages/*.js fragments/*.html images/*.jpg
 var Files embed.FS

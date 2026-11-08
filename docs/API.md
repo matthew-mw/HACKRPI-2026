@@ -309,11 +309,20 @@ Profile changes never grant site-admin status.
 Body: `{name,description,visibility,organization_type,address}`.
 Required trimmed name: 1–120 bytes; description at most 2,000.
 Required visibility: `public`, `invite_only`, or `closed`.
-Required type: `volunteer_group`, `charity`, or `company`.
-Charities/companies require a geocodable street address; volunteer groups inherit
+Required type: `volunteer_group` or `company`. Charity creation through this endpoint is rejected.
+Companies require a geocodable street address; volunteer groups inherit
 the creator's saved location and do not use the address input.
 Creates the organization and an active owner membership atomically.
-Returns `{"id":"UUID"}`. Charities require approval before publishing.
+Returns `{"id":"UUID"}`.
+
+### POST /api/charity
+
+Dedicated to registration from the Charities page. Accepts the same fields as
+`/api/organization`, with `organization_type=charity`, plus optional HTTPS
+`image_url` and `website` links. Requires a geocodable street address.
+New charities start pending and are visible only to their creator and site admins.
+Joining, invitations, and event creation require site-admin approval.
+Returns `{"id":"UUID"}`.
 
 ### POST /api/charity-approval
 
@@ -323,6 +332,9 @@ or a target that is not an existing charity. Sets approval to `approved`;
 there is no rejection/revocation action here.
 
 ### POST /api/event
+
+Optional `image_url` accepts an HTTPS photo or flyer link (up to 2,000 characters).
+It is returned by opportunities, event details, and My Events. Empty uses a default photo.
 
 ```json
 {

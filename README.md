@@ -118,7 +118,7 @@ The spatial tests use connection-local temporary tables. No fixture rows are ins
 into the application's production schema by the tests.
 
 The frontend modules are `data.js` (product vocabulary/rules), `api.js` (HTTP client),
-and `app.js` (UI). No frontend framework or build dependency is needed. HTMX loads
+and `app.js` (shared UI). Page views live in `web/static/js/pages/` and are loaded only for the current URL. Page data uses `/api/community?page=...` so unrelated dashboard queries are not executed. No frontend framework or build dependency is needed. HTMX loads
 the About disclosure from `/static/fragments/about.html` on the same server.
 
 ## Third-party assets

@@ -71,7 +71,7 @@ func (h *LoginHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.FirstName == "" || input.LastName == "" || len(input.FirstName) > 100 || len(input.LastName) > 100 {
-		api.Error(w, 400, "First and last names are required (up to 100 bytes each).")
+		api.Error(w, 400, "Enter your first and last name. Please shorten names that are too long.")
 		return
 	}
 	if utf8.RuneCountInString(input.Password) < 12 || len(input.Password) > 72 {

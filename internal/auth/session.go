@@ -111,7 +111,7 @@ func PublicRequest(r *http.Request) bool {
 		return true
 	}
 	switch r.URL.Path {
-	case "/", "/events", "/healthz", "/login", "/signup", "/api/community", "/api/opportunities", "/api/event-details":
+	case "/", "/discover", "/events", "/healthz", "/login", "/signup", "/api/community", "/api/opportunities", "/api/event-details":
 		return true
 	}
 	return false
@@ -134,7 +134,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 			}
 		}
 		if _, ok := UserID(r.Context()); !ok && !PublicRequest(r) {
-			if (r.Method == "GET" || r.Method == "HEAD") && (r.URL.Path == "/profile" || r.URL.Path == "/matches") && strings.Contains(r.Header.Get("Accept"), "text/html") {
+			if (r.Method == "GET" || r.Method == "HEAD") && isPrivatePage(r.URL.Path) && strings.Contains(r.Header.Get("Accept"), "text/html") {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return
 			}
@@ -143,4 +143,12 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isPrivatePage(path string) bool {
+	switch path {
+	case "/profile", "/matches", "/my-events", "/clubs", "/charities", "/challenges", "/impact":
+		return true
+	}
+	return false
 }

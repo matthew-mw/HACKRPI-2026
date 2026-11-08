@@ -42,12 +42,24 @@ func NewHandler(sessions *auth.Manager, credentials auth.Credentials, databases 
 		"/logout": {"POST", login.Logout},
 		"/signup": {"POST", login.Signup},
 	}
+	// These routes serve the application shell on direct visits and refreshes.
+	for _, path := range []string{"/discover", "/my-events", "/clubs", "/charities", "/challenges", "/impact"} {
+		routes[path] = route{"GET", func(w http.ResponseWriter, r *http.Request) {
+			pageRequest := r.Clone(r.Context())
+			pageRequest.URL.Path = "/"
+			pages.ServeHTTP(w, pageRequest)
+		}}
+	}
 	router := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			product{db: db}.serve(w, r)
 			return
 		}
 		if (r.Method == "GET" || r.Method == "HEAD") && (r.URL.Path == "/login" || r.URL.Path == "/signup") {
+			if _, signedIn := auth.UserID(r.Context()); signedIn {
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
 			pageRequest := r.Clone(r.Context())
 			pageRequest.URL.Path += ".html"
 			pages.ServeHTTP(w, pageRequest)

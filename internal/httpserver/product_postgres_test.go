@@ -47,7 +47,7 @@ func TestProductPostgres(t *testing.T) {
 	config.RuntimeParams["search_path"] = schema + ",public"
 	db := stdlib.OpenDB(*config)
 	defer db.Close()
-	for _, name := range []string{"001_init.sql", "002_sessions.sql", "003_social_product.sql", "004_event_lifecycle.sql", "005_onboarding_charities.sql"} {
+	for _, name := range []string{"001_init.sql", "002_sessions.sql", "003_social_product.sql", "004_event_lifecycle.sql", "005_onboarding_charities.sql", "006_charity_profiles.sql", "007_event_images.sql"} {
 		b, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
 		if err != nil {
 			t.Fatal(err)
@@ -138,7 +138,10 @@ func TestProductPostgres(t *testing.T) {
 	organization := call("POST", "/api/organization", map[string]any{"name": "Integration crew", "description": "Isolated workflow test", "organization_type": "volunteer_group", "visibility": "public"}, ownerCookie, 200)["id"].(string)
 	start := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
 	end := start.Add(time.Hour)
-	event := call("POST", "/api/event", map[string]any{"organization_id": organization, "title": "Isolated test event", "description": "Not a production event", "starts_at": start, "ends_at": end, "capacity": 1, "label": "Test location", "address": address, "causes": []string{"Environment"}}, ownerCookie, 200)["id"].(string)
+	event := call("POST", "/api/event", map[string]any{"organization_id": organization, "title": "Isolated test event", "image_url": "https://example.com/event.jpg", "description": "Not a production event", "starts_at": start, "ends_at": end, "capacity": 1, "label": "Test location", "address": address, "causes": []string{"Environment"}}, ownerCookie, 200)["id"].(string)
+	if call("GET", "/api/event-details?id="+event, nil, ownerCookie, 200)["image_url"] != "https://example.com/event.jpg" {
+		t.Fatal("event picture was not saved")
+	}
 	call("POST", "/api/event", map[string]any{"organization_id": organization, "title": "Unauthorized event", "starts_at": start, "ends_at": end, "capacity": 1, "city": "Troy", "latitude": 42.74, "longitude": -73.69}, volCookie, 403)
 	call("POST", "/api/registration", map[string]any{"event_id": event, "join": true}, volCookie, 200)
 	call("POST", "/api/registration", map[string]any{"event_id": event, "join": true}, otherCookie, 409)
@@ -311,7 +314,59 @@ func TestProductPostgres(t *testing.T) {
 		t.Fatal("event was not explicitly marked completed")
 	}
 
-	charity := call("POST", "/api/organization", map[string]any{"name": "Review charity", "organization_type": "charity", "visibility": "public", "address": address}, ownerCookie, 200)["id"].(string)
+	charity := call("POST", "/api/charity", map[string]any{"name": "Review charity", "description": "Helping our neighbors", "image_url": "https://example.com/charity.jpg", "website": "https://example.com", "organization_type": "charity", "visibility": "public", "address": address}, ownerCookie, 200)["id"].(string)
+	dashboard := call("GET", "/api/dashboard", nil, ownerCookie, 200)
+	for page, fields := range pageDataFields {
+		scoped := call("GET", "/api/community?page="+page, nil, ownerCookie, 200)
+		expected := strings.Fields(fields)
+		if len(scoped) != len(expected) {
+			t.Fatalf("%s loaded unexpected fields: %v", page, scoped)
+		}
+		for _, key := range expected {
+			if _, ok := scoped[key]; !ok {
+				t.Fatalf("%s missing %s", page, key)
+			}
+		}
+	}
+	call("GET", "/api/community?page=unknown", nil, ownerCookie, 400)
+	foundCharity := false
+	for _, row := range dashboard["charities"].([]any) {
+		c := row.(map[string]any)
+		if c["id"] == charity {
+			foundCharity = true
+			if c["image_url"] != "https://example.com/charity.jpg" || c["website"] != "https://example.com" || c["description"] != "Helping our neighbors" {
+				t.Fatal("charity profile fields were not saved")
+			}
+		}
+	}
+	if !foundCharity {
+		t.Fatal("owner cannot see pending charity")
+	}
+	assertCharityVisible := func(cookie *http.Cookie, want bool) {
+		t.Helper()
+		listing := call("GET", "/api/community?page=charities", nil, cookie, 200)
+		found := false
+		for _, row := range listing["charities"].([]any) {
+			if row.(map[string]any)["id"] == charity {
+				found = true
+			}
+		}
+		if found != want {
+			t.Fatalf("charity visibility = %t, want %t", found, want)
+		}
+	}
+	assertCharityVisible(ownerCookie, true)
+	assertCharityVisible(volCookie, false)
+	if _, err = db.ExecContext(ctx, `UPDATE users SET is_site_admin=true WHERE id=$1`, volunteer); err != nil {
+		t.Fatal(err)
+	}
+	assertCharityVisible(volCookie, true)
+	if _, err = db.ExecContext(ctx, `UPDATE users SET is_site_admin=false WHERE id=$1`, volunteer); err != nil {
+		t.Fatal(err)
+	}
+
+	call("POST", "/api/membership", map[string]any{"organization_id": charity, "join": true}, volCookie, 403)
+	call("POST", "/api/invite", map[string]any{"organization_id": charity, "user_ids": []string{volunteer}}, ownerCookie, 403)
 	charityEvent := map[string]any{"organization_id": charity, "title": "Charity service", "starts_at": time.Now().Add(48 * time.Hour), "ends_at": time.Now().Add(49 * time.Hour), "capacity": 10, "address": address}
 	call("POST", "/api/event", charityEvent, ownerCookie, 403)
 	call("POST", "/api/charity-approval", map[string]any{"organization_id": charity}, ownerCookie, 403)
@@ -319,6 +374,7 @@ func TestProductPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	call("POST", "/api/charity-approval", map[string]any{"organization_id": charity}, ownerCookie, 200)
+	assertCharityVisible(volCookie, true)
 	call("POST", "/api/membership", map[string]any{"organization_id": charity, "join": true}, volCookie, 200)
 	call("POST", "/api/event", charityEvent, volCookie, 200)
 	clubEvent := map[string]any{"organization_id": organization, "title": "Member cannot publish", "starts_at": time.Now().Add(48 * time.Hour), "ends_at": time.Now().Add(49 * time.Hour), "capacity": 10, "address": address}

@@ -65,7 +65,7 @@ const upcomingQuery = `SELECT COALESCE(jsonb_agg(row ORDER BY starts_at),'[]'::j
 
 const invitationsQuery = `SELECT jsonb_build_object(
  'events',COALESCE((SELECT jsonb_agg(row) FROM (SELECT e.id,e.title,u.first_name||' '||u.last_name AS invited_by FROM event_invitations i JOIN events e ON e.id=i.event_id JOIN users u ON u.id=i.invited_by WHERE i.user_id=$1 AND e.completed_at IS NULL AND e.starts_at>=now() AND e.status='published' AND NOT EXISTS(SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=$1 AND r.status='registered')) row),'[]'::jsonb),
- 'crews',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',o.id,'name',o.name)) FROM organization_members m JOIN organizations o ON o.id=m.organization_id WHERE m.user_id=$1 AND m.status='invited'),'[]'::jsonb))`
+ 'crews',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',o.id,'name',o.name)) FROM organization_members m JOIN organizations o ON o.id=m.organization_id WHERE m.user_id=$1 AND m.status='invited' AND (o.organization_type<>'charity' OR o.approval_status='approved')),'[]'::jsonb))`
 
 const peopleQuery = `SELECT COALESCE(jsonb_agg(row ORDER BY name),'[]'::jsonb) FROM (
  SELECT u.id,u.first_name||' '||u.last_name AS name,
