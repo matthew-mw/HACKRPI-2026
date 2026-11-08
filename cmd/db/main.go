@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/matthew-mw/HACKRPI-2026/migrations"
+	"github.com/matthew-mw/HACKRPI-2026/internal/database"
 )
 
 func fail(err error) {
@@ -24,8 +24,8 @@ func fail(err error) {
 }
 
 func main() {
-	if len(os.Args) != 2 || (os.Args[1] != "check" && os.Args[1] != "init-db") {
-		log.Fatal("usage: go run ./cmd/db [check|init-db]")
+	if len(os.Args) != 2 || (os.Args[1] != "check" && os.Args[1] != "init-db" && os.Args[1] != "migrate") {
+		log.Fatal("usage: go run ./cmd/db [check|init-db|migrate]")
 	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -53,23 +53,12 @@ func main() {
 		}
 		return
 	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		fail(err)
-	}
-	defer tx.Rollback()
-	for _, name := range []string{"001_init.sql", "002_sessions.sql"} {
-		source, err := migrations.Files.ReadFile(name)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if _, err = tx.ExecContext(ctx, string(source)); err != nil {
-			_ = tx.Rollback()
+	if err := database.Apply(ctx, db); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
 			fail(err)
 		}
+		log.Fatal(err)
 	}
-	if err = tx.Commit(); err != nil {
-		fail(err)
-	}
-	log.Print("database initialized successfully")
+	log.Print("database migrations complete")
 }

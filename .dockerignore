@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+*.pem
+*.key
+deploy
+scripts
+README.md
+
+.deploy.env
+*-credentials.txt

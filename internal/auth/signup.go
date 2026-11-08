@@ -12,8 +12,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 )
 
 type Registration struct {

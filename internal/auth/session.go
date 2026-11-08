@@ -7,10 +7,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 )
 
 var ErrUnauthenticated = errors.New("unauthenticated")

@@ -1,4 +1,4 @@
-package main
+package httpserver
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func assertJSON(t *testing.T, w *httptest.ResponseRecorder, status int) {
 }
 
 func TestBrowserPagesAndAssets(t *testing.T) {
-	handler := newMux(auth.NewManager(make(testStore), false), testCredentials{})
+	handler := NewHandler(auth.NewManager(make(testStore), false), testCredentials{})
 	for _, tc := range []struct{ path, content string }{
 		{"/", "<h1>CharityMatch</h1>"},
 		{"/events", "<h1>Events</h1>"},
@@ -99,7 +99,7 @@ func TestBrowserPagesAndAssets(t *testing.T) {
 
 func TestRoutesAndLogin(t *testing.T) {
 	store := make(testStore)
-	handler := newMux(auth.NewManager(store, false), testCredentials{})
+	handler := NewHandler(auth.NewManager(store, false), testCredentials{})
 	request := func(method, path, body, contentType, origin string, cookie *http.Cookie) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "http://example.com"+path, strings.NewReader(body))
 		r.Header.Set("Content-Type", contentType)
@@ -170,7 +170,7 @@ func (testCredentials) Register(_ context.Context, input auth.Registration) (str
 
 func TestSignupSession(t *testing.T) {
 	store := make(testStore)
-	handler := newMux(auth.NewManager(store, false), testCredentials{})
+	handler := NewHandler(auth.NewManager(store, false), testCredentials{})
 	body := `{"first_name":"Test","last_name":"User","email":"test@example.com","password":"long-password"}`
 	for _, origin := range []string{"https://evil.test", "http://example.com"} {
 		r := httptest.NewRequest("POST", "http://example.com/signup", strings.NewReader(body))
