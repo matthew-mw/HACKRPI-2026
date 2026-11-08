@@ -39,7 +39,8 @@ remote_stage=$(ssh "$target" 'umask 077; mktemp -d /tmp/charitymatch-deploy.XXXX
 scp "$bundle/source.tar.gz" "$target:$remote_stage/source.tar.gz"
 scp "$bundle/production.env" "$target:$remote_stage/production.env"
 scp deploy/compose.yaml deploy/Caddyfile "$target:$remote_stage/"
-ssh "$target" bash -s -- "$remote_stage" "$domain" <<'REMOTE'
+# Keep Git Bash from converting the server's /tmp path into a Windows path.
+MSYS_NO_PATHCONV=1 ssh "$target" bash -s -- "$remote_stage" "$domain" <<'REMOTE'
 set -euo pipefail
 stage=$1
 domain=$2
@@ -60,11 +61,12 @@ printf 'DOMAIN=%s\n' "$domain" > .env
 chmod 600 .env
 # Apply pending schema migrations before replacing the running containers.
 docker compose build --pull app
-docker compose run --rm --no-deps app /app/db migrate
-docker compose run --rm --no-deps app /app/db check
+# The remote script itself arrives on stdin; one-off containers must not consume it.
+docker compose run --rm --no-deps app /app/db migrate </dev/null
+docker compose run --rm --no-deps app /app/db check </dev/null
 docker compose up -d --wait --wait-timeout 120
 # Reload an existing proxy when deploying to a different domain.
-docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile </dev/null
 printf '\nContainers are running. Checking public HTTPS…\n'
 curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors --max-time 10 --resolve "$domain:443:127.0.0.1" "https://$domain/healthz"
 printf '\nDeployed: https://%s\n' "$domain"

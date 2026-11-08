@@ -18,7 +18,7 @@ if (form) form.addEventListener('submit', async (event) => {
     });
     const result = await response.json();
     if (!response.ok) { status.textContent = result.error || 'Please try again.'; return; }
-    window.location.assign(form.dataset.auth === 'logout' ? '/' : '/profile');
+    window.location.assign(form.dataset.auth === 'signup' ? '/?welcome=1' : '/');
   } catch {
     status.textContent = 'Unable to connect. Please try again.';
   } finally { button.disabled = false; }

@@ -75,7 +75,7 @@ func (h *LoginHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if utf8.RuneCountInString(input.Password) < 12 || len(input.Password) > 72 {
-		api.Error(w, 400, "Use at least 12 characters and at most 72 bytes for your password.")
+		api.Error(w, 400, "Choose at least 12 characters. If your password is too long, use a shorter phrase.")
 		return
 	}
 	registrar, ok := h.Credentials.(Registrar)

@@ -1,0 +1,24 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const source = fs.readFileSync('web/static/js/app.js','utf8');
+let html = '';
+const element = {addEventListener(){}, close(){}, showModal(){}, classList:{add(){},remove(){}}, get innerHTML(){return html}, set innerHTML(v){html=v}};
+const context = vm.createContext({document:{querySelector:()=>element,addEventListener(){},querySelectorAll:()=>[]},window:{addEventListener(){}},location:{pathname:'/',search:'',hash:''},Intl,URLSearchParams,console,setTimeout,clearTimeout,CAUSES:['Environment','Education'],DAYS:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']});
+// Avoid starting network loading; retain the actual UI functions and event handlers.
+vm.runInContext(source.replace(/render\(\);\s*refresh\(\)\.then\([\s\S]*?\nlet onboarding = false;/, 'let onboarding = false;'), context);
+vm.runInContext(`data.profile={id:'volunteer',first_name:'Test',last_name:'Person',tags:[{name:'Environment',category:'cause'},{name:'Environment',category:'interest'}],availability:[],max_distance_km:25}; modal=(title,content)=>{globalThis.title=title;globalThis.content=content}; preferences();`,context);
+assert.match(context.content,/Abilities you can offer/);
+assert.match(context.content,/type="checkbox" name="cause"/);
+assert.doesNotMatch(context.content,/comma separated/);
+vm.runInContext('locationForm()',context);
+assert.match(context.content,/City and state, or ZIP code/);
+vm.runInContext('onboardingStep(1)',context);
+assert.match(context.title,/2 of 4/);
+vm.runInContext('onboardingStep(2)',context);
+assert.match(context.content,/type="time"/);
+vm.runInContext('data.charities=[{id:"charity",name:"Test charity",approval_status:"pending"}]; globalThis.card=charities()',context);
+assert.doesNotMatch(context.card,/Approve charity/);
+vm.runInContext('data.profile.is_site_admin=true; globalThis.card=charities()',context);
+assert.match(context.card,/Approve charity/);
+console.log('Preference chips, location, onboarding, and charity approval UI checks passed.');

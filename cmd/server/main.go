@@ -49,7 +49,7 @@ func main() {
 	}()
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           httpserver.NewHandler(sessions, &auth.PasswordCredentials{DB: database}),
+		Handler:           httpserver.NewHandler(sessions, &auth.PasswordCredentials{DB: database}, database),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,

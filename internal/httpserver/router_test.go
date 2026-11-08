@@ -60,8 +60,8 @@ func assertJSON(t *testing.T, w *httptest.ResponseRecorder, status int) {
 func TestBrowserPagesAndAssets(t *testing.T) {
 	handler := NewHandler(auth.NewManager(make(testStore), false), testCredentials{})
 	for _, tc := range []struct{ path, content string }{
-		{"/", "<h1>CharityMatch</h1>"},
-		{"/events", "<h1>Events</h1>"},
+		{"/", "Volunteer Together"},
+		{"/events", "Volunteer Together"},
 		{"/login", "Welcome back"},
 		{"/signup", "Create your account"},
 		{"/static/css/site.css", "font-family"},
@@ -114,7 +114,7 @@ func TestRoutesAndLogin(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
 		status int
-	}{{"/", 200}, {"/events", 501}, {"/healthz", 200}, {"/profile", 401}, {"/matches", 401}, {"/future", 401}, {"/static/app.css", 404}} {
+	}{{"/", 200}, {"/events", 503}, {"/healthz", 200}, {"/profile", 401}, {"/matches", 401}, {"/future", 401}, {"/static/app.css", 404}} {
 		assertJSON(t, request("GET", tc.path, "", "", "", nil), tc.status)
 	}
 	for _, tc := range []struct {
@@ -149,7 +149,7 @@ func TestRoutesAndLogin(t *testing.T) {
 	for _, tc := range []struct {
 		method, path string
 		status       int
-	}{{"GET", "/profile", 200}, {"GET", "/matches", 501}, {"GET", "/missing", 404}, {"GET", "/static/app.css", 404}, {"PUT", "/profile", 405}, {"GET", "//profile", 404}, {"GET", "/events/../profile", 404}} {
+	}{{"GET", "/profile", 200}, {"GET", "/matches", 503}, {"GET", "/missing", 404}, {"GET", "/static/app.css", 404}, {"PUT", "/profile", 405}, {"GET", "//profile", 404}, {"GET", "/events/../profile", 404}} {
 		assertJSON(t, request(tc.method, tc.path, "", "", "", cookie), tc.status)
 	}
 	assertJSON(t, request("POST", "/logout", "", "", "https://evil.test", cookie), 403)
@@ -194,7 +194,7 @@ func TestSignupSession(t *testing.T) {
 		r.AddCookie(w.Result().Cookies()[0])
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
-		if w.Code != 200 || !strings.Contains(w.Body.String(), "<h1>Profile</h1>") {
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "Volunteer Together") {
 			t.Fatal("signup session cannot view profile")
 		}
 	}

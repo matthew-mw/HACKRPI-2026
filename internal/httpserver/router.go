@@ -2,6 +2,7 @@
 package httpserver
 
 import (
+	"database/sql"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -13,7 +14,11 @@ import (
 )
 
 // NewHandler builds the application routes with session and cross-origin protection.
-func NewHandler(sessions *auth.Manager, credentials auth.Credentials) http.Handler {
+func NewHandler(sessions *auth.Manager, credentials auth.Credentials, databases ...*sql.DB) http.Handler {
+	var db *sql.DB
+	if len(databases) > 0 {
+		db = databases[0]
+	}
 	login := auth.NewLoginHandler(sessions, credentials)
 	pages := http.FileServerFS(templates.Files)
 	assets := http.StripPrefix("/static/", http.FileServerFS(static.Files))
@@ -24,15 +29,11 @@ func NewHandler(sessions *auth.Manager, credentials auth.Credentials) http.Handl
 	}
 	routes := map[string]route{
 		"/": {"GET", func(w http.ResponseWriter, r *http.Request) {
-			api.JSON(w, 200, map[string]string{"service": "CharityMatch"})
+			api.JSON(w, 200, map[string]string{"service": "Volunteer Together"})
 		}},
 		"/healthz": {"GET", func(w http.ResponseWriter, r *http.Request) { api.JSON(w, 200, map[string]string{"status": "ok"}) }},
-		"/events": {"GET", func(w http.ResponseWriter, r *http.Request) {
-			api.Error(w, http.StatusNotImplemented, "events API is not implemented")
-		}},
-		"/matches": {"GET", func(w http.ResponseWriter, r *http.Request) {
-			api.Error(w, http.StatusNotImplemented, "matches API is not implemented")
-		}},
+		"/events":  {"GET", eventHandler(db, false)},
+		"/matches": {"GET", eventHandler(db, true)},
 		"/profile": {"GET", func(w http.ResponseWriter, r *http.Request) {
 			id, _ := auth.UserID(r.Context())
 			api.JSON(w, 200, map[string]string{"user_id": id})
@@ -42,6 +43,10 @@ func NewHandler(sessions *auth.Manager, credentials auth.Credentials) http.Handl
 		"/signup": {"POST", login.Signup},
 	}
 	router := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			product{db: db}.serve(w, r)
+			return
+		}
 		if (r.Method == "GET" || r.Method == "HEAD") && (r.URL.Path == "/login" || r.URL.Path == "/signup") {
 			pageRequest := r.Clone(r.Context())
 			pageRequest.URL.Path += ".html"

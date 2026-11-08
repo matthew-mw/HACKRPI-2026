@@ -1,13 +1,108 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CharityMatch</title>
-  <link rel="stylesheet" href="/static/css/site.css" /></head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#145b45" />
+    <meta
+      name="description"
+      content="Do Good. Together. A social volunteering community. Do Good. Together."
+    />
+    <title>Volunteer Together — Do Good. Together.</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <script src="/static/js/htmx.min.js" defer></script>
+    <script src="/static/js/data.js" defer></script>
+    <script src="/static/js/api.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+  </head>
   <body>
-    <h1>CharityMatch</h1>
-    <p>Go + HTMX volunteer and charity matching platform.</p>
-    <nav><a href="/events">Events</a> <a href="/profile">Profile</a> <a href="/login">Sign in</a> <a href="/signup">Create account</a></nav>
+    <aside class="sidebar">
+      <a class="brand" href="#home"
+        ><span class="brand-icon"
+          ><svg
+            viewBox="0 0 52 52"
+            width="47"
+            height="47"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 35C1 33 3 18 14 18C16 6 35 5 39 19C51 18 54 35 43 38H13"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+            <path
+              d="M26 33s-11-6-8-11c2-4 7-2 8 0c2-3 7-4 9 0c3 5-9 11-9 11Z"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+            <circle cx="15" cy="41" r="3" fill="currentColor" />
+            <circle cx="26" cy="43" r="3" fill="currentColor" />
+            <circle cx="37" cy="41" r="3" fill="currentColor" />
+            <path
+              d="M18 42l5 1m6 0l5-1"
+              stroke="currentColor"
+              stroke-width="2"
+            /></svg></span
+        ><span
+          >volunteer<span class="brand-bottom"
+            >together<span class="brand-dot">.</span></span
+          ></span
+        ></a
+      >
+      <div class="workspace">
+        YOUR COMMUNITY <span>Find your community</span>
+      </div>
+      <nav id="navigation" aria-label="Main navigation"></nav>
+      <div class="sidebar-bottom">
+        <div class="mini-card">
+          <span>SMALL ACTIONS. BIG IMPACT.</span>
+          <h3>A little time.<br />A lot of good.</h3>
+          <p>Your next chapter starts with showing up.</p>
+          <a href="#discover">Find your next opportunity ↗</a>
+        </div>
+        <button class="account" data-action="profile">
+          <span class="avatar me">→</span
+          ><span
+            ><b>Your community</b><small>Your volunteer profile</small></span
+          ><span>↗</span>
+        </button>
+      </div>
+    </aside>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <span class="location-dot"></span>
+          <span id="community-location">Your local good</span>
+          <span class="muted"> / Do Good. Together.</span>
+        </div>
+        <div class="top-actions">
+          <span class="community-label">YOUR COMMUNITY</span
+          ><button
+            class="icon-button"
+            data-action="notifications"
+            aria-label="Notifications"
+          >
+            ♧<i></i></button
+          ><a class="avatar me" href="#profile" aria-label="Your profile">→</a>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"><div class="skeleton"></div></main>
+      <footer>
+        Do Good. Together.
+        <span>Your community. Your time. Your impact.</span
+        ><button
+          hx-get="/static/fragments/about.html"
+          hx-target="#about"
+          hx-swap="innerHTML"
+        >
+          About Volunteer Together
+        </button>
+        <div id="about"></div>
+      </footer>
+    </div>
+    <dialog id="modal"><div id="modal-content"></div></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

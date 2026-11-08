@@ -111,7 +111,7 @@ func PublicRequest(r *http.Request) bool {
 		return true
 	}
 	switch r.URL.Path {
-	case "/", "/events", "/healthz", "/login", "/signup":
+	case "/", "/events", "/healthz", "/login", "/signup", "/api/community", "/api/opportunities", "/api/event-details":
 		return true
 	}
 	return false
