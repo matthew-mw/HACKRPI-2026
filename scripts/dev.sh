@@ -10,8 +10,8 @@ fi
 : "${DATABASE_URL:?Set DATABASE_URL in .env or your environment}"
 case "${1:-run}" in
     run) exec go run ./cmd/server ;;
-    check|init-db)
+    check|init-db|migrate)
         exec go run ./cmd/db "$1"
         ;;
-    *) echo 'Usage: sh scripts/dev.sh [run|check|init-db]' >&2; exit 2 ;;
+    *) echo 'Usage: sh scripts/dev.sh [run|check|init-db|migrate]' >&2; exit 2 ;;
 esac

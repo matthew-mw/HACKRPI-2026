@@ -1,131 +1,180 @@
-# CharityMatch / HACKRPI-2026
+# CharityMatch
 
-Go 1.26+ with PostgreSQL (the initial schema also requires pgvector and PostGIS).
+A volunteer and charity matching application built with Go and PostgreSQL.
+Includes signup, login, database-backed sessions, and HTML pages. Event browsing
+and matching are currently placeholders.
 
-## Run
+## Local development
 
-### Tiger Data / Tiger Cloud setup
-
-1. [Create a Tiger Cloud service](https://www.tigerdata.com/docs/get-started/quickstart/create-service)
-   in your account and wait for it to show **Ready**. Save the downloaded credentials.
-   Choose a region near your app and review the selected service's cost before creating it.
-2. Copy its PostgreSQL connection URL from the service's connection details into
-   your local `.env` as `DATABASE_URL='postgresql://…?sslmode=require'`.
-   Use the supplied host, port, username, and database name (usually `tsdb`),
-   and URL-encode special characters in the password. See `.env.example` for the format.
-   Keep TLS enabled for Tiger Cloud. `.env` is local and must not be committed.
-3. Check connectivity and available extensions, then initialize a **new database**:
-
-   ```sh
-   sh scripts/dev.sh check
-   sh scripts/dev.sh init-db
-   ```
-
-   Initialization enables `pgcrypto`, `vector` (pgvector), and `postgis`, and applies
-   both migrations in one transaction. It is a one-time operation, not a migration
-   tracker: do not rerun it against an existing installation. No hypertables are
-   needed for the current relational schema.
-4. For local HTTP login, add `AUTH_INSECURE_LOCAL_HTTP=true` to `.env`, then start:
-
-   ```sh
-   sh scripts/dev.sh run
-   # In another terminal:
-   curl http://localhost:8080/healthz
-   ```
-
-The helper loads the project's trusted `.env`; direct `go run` still requires
-exported environment variables. If you prefer Tiger Console's SQL editor, execute
-the two migration files in order there instead of using the Go setup command. No local `psql` installation is required.
-
-### Manual setup
-
-Apply `migrations/001_init.sql` to a new database, then apply
-`migrations/002_sessions.sql`. Existing installations only need migration 002.
-Export `DATABASE_URL` and optionally `PORT` (default `8080`), then run:
+Requires Go 1.26+ and PostgreSQL with `pgcrypto`, `vector` (pgvector), and `postgis`.
 
 ```sh
-go run ./cmd/server
+cp .env.example .env
+# Edit .env with your database connection URL.
+sh scripts/dev.sh migrate
+sh scripts/dev.sh run
 ```
 
-The server reads exported environment variables; it does not load `.env` files.
-Use HTTPS in production, normally through a reverse proxy that preserves the
-public Host header. Cookies are Secure, HttpOnly, SameSite=Lax, host-only, and
-named `__Host-session`. For **local HTTP development only**, export
-`AUTH_INSECURE_LOCAL_HTTP=true`; this uses a non-Secure cookie named `session`.
-Never enable that flag on a public deployment.
+Open http://localhost:8080. The helper loads `.env`; direct `go run ./cmd/server`
+requires exported environment variables. Set `AUTH_INSECURE_LOCAL_HTTP=true` only
+for local HTTP development. Templates and static files are embedded in the binary;
+restart after editing them.
 
-## Authentication
+## Deploy to Vultr
 
-Browsers requesting `text/html` receive the bundled HTML pages at `/`, `/events`,
-`/profile`, and `/matches`. Profile and matches require a session. Public assets
-are served under `/static/`. Templates and assets are embedded at build time, so
-restart `go run` after editing them. Login and signup pages are available at `/login` and `/signup`.
-Signup accepts first name, last name, email, and a password of at least 12 characters
-(up to 72 bytes), stores a bcrypt hash, and starts a session. Browser forms use
-JavaScript to submit JSON; successful authentication opens `/profile`.
-Unauthenticated browser visits to profile and matches redirect to login.
+The scripts deploy to an existing Ubuntu server over SSH. They install Docker,
+build the application on the server, apply database migrations, and start the app
+behind Caddy with automatic HTTPS. PostgreSQL remains hosted on Tiger Data.
 
-Clients without `Accept: text/html` continue to receive the JSON API responses
-listed below. API response bodies use `application/json`. Errors have the shape
-`{"error":"message"}`. HEAD responses omit the body as required by HTTP.
+### 1. Prepare the server and domain
 
-| Route | Access | Response |
-| --- | --- | --- |
-| GET `/` | Public | Service metadata |
-| GET `/healthz` | Public | `{"status":"ok"}` |
-| GET `/events` | Public | 501 JSON placeholder pending implementation |
-| GET `/login`, `/signup` | Public | HTML authentication forms |
-| POST `/signup` | Public | Creates account and session (201) |
-| POST `/login` | Public | `{"user_id":"…"}` and session cookie |
-| GET `/profile` | Session | Current `user_id` |
-| GET `/matches` | Session | 501 JSON placeholder pending implementation |
-| POST `/logout` | Session | `{"ok":true}` and cleared session cookie |
+- Create a dedicated Ubuntu **24.04, 26.04, or 26.10** Vultr instance with your SSH
+  public key. Use at least 2 GB RAM for building the image.
+- Verify `ssh root@YOUR_SERVER_IP` works. Confirm the host key when first connecting.
+- Point your domain's **A record** to the server IPv4 address. On Porkbun, leave
+  the Host field blank for the root domain. Remove conflicting root A/ALIAS records.
+  Only publish an AAAA record if IPv6 is configured for this server.
+- Allow TCP **80 and 443** in both the Vultr firewall and the server firewall.
+  Allow SSH from your IP. UDP 443 is optional. Leave port 8080 closed.
+- Ports 80/443 must be available; the script does not change existing firewall rules.
 
-GET routes also support HEAD. All other requests require a valid session by
-default. Configure the explicit method/path allowlist in `auth.PublicRequest`.
-Missing authentication returns 401 JSON, without redirects or HTMX-specific
-behavior. Authenticated unknown routes return 404; unsupported methods return
-405 with an Allow header. Cross-origin unsafe browser requests return 403 JSON.
+If UFW is enabled, run on the server:
 
-POST `/login` requires `Content-Type: application/json` and a single object:
-
-```json
-{"email":"user@example.com","password":"your-password"}
+```sh
+ufw allow 80/tcp
+ufw allow 443/tcp
 ```
 
-Malformed bodies, unknown fields, and missing fields return 400; unsupported
-content types return 415; invalid credentials return 401. The body limit is 8 KiB.
-Login uses existing users whose `users.password_hash` contains a bcrypt hash
-produced with `bcrypt.GenerateFromPassword` (default cost or higher). Accounts
-with NULL password hashes cannot use password login. Password reset and email verification are not implemented. Login limits concurrent password checks;
-deployment-level rate limiting is still needed to limit repeated attempts.
-Browser clients should send the session cookie with requests (use
-`credentials: "include"` where appropriate). Cross-origin frontend hosting
-requires an explicit CORS and cookie policy; it is not enabled by default.
+Your local machine needs Bash, Python 3, SSH, SCP, and tar. Local Docker and Go
+are not required to deploy. Use `~/.ssh/config` to configure a custom SSH key or port.
 
-A successful login creates a fresh random 256-bit token; only its SHA-256 hash
-is stored in Postgres. Sessions have a fixed 24-hour expiry. Login replaces the
-browser's old session; POST `/logout` deletes the current session and clears its
-cookie. `PostgresStore.DeleteUserSessions` is available for future password reset
-and sign-out-all flows. Expired records are cleaned hourly. Database errors fail
-closed with 503. Auth middleware supplies the user ID through `auth.UserID(ctx)`;
-handlers must separately enforce organization roles and resource ownership.
+### 2. Configure the database
 
-Go's `http.CrossOriginProtection` wraps all routes and rejects cross-origin
-unsafe browser requests, including login/logout. GET and HEAD handlers must
-remain read-only. Non-browser clients without Origin/Fetch Metadata headers
-are accepted by this protection but still require authentication on private
-routes.
+Create a Tiger Data service, then copy the example:
 
-## Verify
+```sh
+cp deploy/production.env.example .env.production
+chmod 600 .env.production
+```
+
+Edit `.env.production` with your service's host, port, and database password:
+
+```env
+DATABASE_URL=postgresql://tsdbadmin@YOUR_HOST:YOUR_PORT/tsdb?sslmode=require
+DATABASE_PASSWORD='your actual database password'
+```
+
+`DATABASE_PASSWORD` is literal text; no URL encoding is needed. The deployment
+helper encodes it automatically. If your URL already contains an encoded password,
+omit `DATABASE_PASSWORD`. Keep this file out of Git.
+
+Tiger Console's passwordless SQL editor does not authenticate this external app.
+Use the database password from the service credentials or reset it in Tiger Data.
+If a database IP allowlist is enabled, allow the Vultr server's outbound IP.
+
+### 3. Deploy
+
+From the repository root:
+
+```sh
+./deploy.sh root@YOUR_SERVER_IP yourdomain.com
+```
+
+The command uploads the source and database configuration, builds the image,
+applies pending migrations, starts both containers, and checks HTTPS. On success,
+it prints the site's URL. No separate `docker compose` command is needed.
+
+To save your server settings locally:
+
+```sh
+cp deploy/settings.env.example .deploy.env
+# Edit .deploy.env with your server and domain.
+./deploy.sh
+```
+
+`.deploy.env` and `.env.production` are ignored by Git. Scripts have no built-in
+server or domain defaults. You can also export `DEPLOY_TARGET` and `DEPLOY_DOMAIN`,
+or pass the target and domain to `deploy.sh` directly. Set `DEPLOY_ENV_FILE` to use
+a different credentials
+file. Server files live in `/opt/charitymatch`; credentials have mode 600 and are
+excluded from the image. Containers restart automatically after a reboot.
+
+### Updates and operations
+
+With `.deploy.env` configured (or `DEPLOY_TARGET` exported):
+
+```sh
+./deploy.sh          # Publish local changes, migrate, and start
+./run.sh             # Start the existing deployment without rebuilding
+./run.sh restart     # Recreate and restart containers
+./run.sh status      # Show container status
+./run.sh logs        # Show recent application and proxy logs
+```
+
+Migrations run in a transaction and are tracked with checksums. Repeat deployments
+skip applied migrations. The original manually initialized schema can be adopted;
+partial legacy schemas stop with a repair error. Updates may briefly interrupt
+requests; there is no automatic rollback. Back up your database before schema changes.
+
+### Troubleshooting
+
+| Problem | Check |
+| --- | --- |
+| `password authentication failed` | Verify the service username/password in `.env.production`, then deploy again. Schema initialization cannot fix authentication failures. |
+| Connection refused | Run `./run.sh status`, then `./run.sh`; confirm DNS and TCP 80/443 firewall rules. |
+| HTTPS or certificate failure | Check DNS, conflicting AAAA records, ports 80/443, and `./run.sh logs`. |
+| Migration failure | Read the database error and repair the schema; do not delete existing tables to retry. |
+
+## Authentication and API
+
+Browser pages: `/`, `/events`, `/login`, `/signup`, `/profile`, and `/matches`.
+Profile and matches require a session. API clients receive JSON; errors use
+`{"error":"message"}`. Browser forms submit JSON with JavaScript.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /healthz` | Service health |
+| `POST /signup` | Create an account and session; accepts `first_name`, `last_name`, `email`, `password` |
+| `POST /login` | Start a session; accepts `email`, `password` |
+| `POST /logout` | Revoke the session |
+| `GET /profile` | Current user ID for API clients; HTML for browsers |
+
+Passwords use bcrypt. Sessions expire after 24 hours; only token hashes are stored
+in the database. Production cookies are Secure, HttpOnly, and SameSite=Lax.
+Cross-origin unsafe browser requests are rejected. Password reset, email verification,
+and deployment-level rate limiting are not implemented.
+
+## Tests
 
 ```sh
 go test ./...
 go vet ./...
-# Optional: run against a disposable PostgreSQL database, creating/dropping a test schema.
-TEST_DATABASE_URL='postgres://…' go test ./internal/auth -run TestPostgres -v
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_prepare_deploy_env.py
 ```
 
-Tests cover public/private route access, login/logout, CSRF rejection, JSON request/response validation, token hashing, cookie flags, rotation, expiry, revocation, and store
-errors. The PostgreSQL integration test applies migration 002 and verifies real
-password authentication and session queries with a minimal users fixture.
+For database integration tests, set `TEST_DATABASE_URL` to a disposable PostgreSQL
+database and run `go test ./internal/auth ./internal/database -v`. Tests create and remove
+isolated schemas.
+
+## Project structure
+
+```text
+cmd/
+  server/             Server startup and database connection
+  db/                 Database migration and check commands
+internal/
+  api/                JSON response helpers
+  auth/               Accounts, passwords, and sessions
+  database/           Migration runner and integration tests
+  httpserver/         Routes and HTTP tests
+migrations/           Embedded, versioned SQL migrations
+web/
+  templates/          Embedded HTML pages
+  static/             Embedded CSS and JavaScript
+scripts/              Local development and deployment credential helpers
+deploy/               Docker Compose, Caddy, and production env example
+```
+
+`deploy.sh` publishes the application; `run.sh` manages the deployed containers.
+Tests live beside the code they verify. Add new packages when functionality is
+implemented, rather than creating empty placeholders.

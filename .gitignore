@@ -1,5 +1,10 @@
 .env
 .env.*
 !.env.example
+__pycache__/
 
-.env
+# Local deployment settings and credentials
+.deploy.env
+*.pem
+*.key
+*-credentials.txt

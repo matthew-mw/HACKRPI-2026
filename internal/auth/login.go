@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 	"io"
 	"mime"
 	"net/http"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/matthew-mw/HACKRPI-2026/internal/api"
 )
 
 type Credentials interface {
